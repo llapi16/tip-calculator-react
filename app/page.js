@@ -1,32 +1,146 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Navbar from "../components/Navbar.js"
 import Hero from "../components/Hero.js"
+import { supabase } from "../lib/supabaseClient.js"
 
 export default function Home() {
+  // Auth state
+  const [user, setUser] = useState(null)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [authMode, setAuthMode] = useState("login") // "login" or "signup"
+  const [authError, setAuthError] = useState("")
+
+  // Calculator state
   const [bill, setBill] = useState("")
   const [tip, setTip] = useState("")
   const [tipAmount, setTipAmount] = useState(null)
   const [total, setTotal] = useState(null)
 
-  function calculateTip() {
+  // Check if a user is already logged in when the page loads
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    // Listen for login/logout events
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  async function handleSignUp() {
+    setAuthError("")
+    const { error } = await supabase.auth.signUp({ email, password })
+    if (error) setAuthError(error.message)
+  }
+
+  async function handleLogin() {
+    setAuthError("")
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) setAuthError(error.message)
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+  }
+
+  async function calculateTip() {
     const billNum = parseFloat(bill)
     const tipNum = parseFloat(tip)
     const calculatedTip = billNum * (tipNum / 100)
     const calculatedTotal = billNum + calculatedTip
     setTipAmount(calculatedTip.toFixed(2))
     setTotal(calculatedTotal.toFixed(2))
+
+    const { error } = await supabase
+      .from("calculations")
+      .insert({
+        bill_amount: billNum,
+        tip_percent: tipNum,
+        tip_amount: calculatedTip,
+        total: calculatedTotal,
+        user_id: user.id,
+      })
+
+    if (error) {
+      console.log("Error saving to database:", error.message)
+    } else {
+      console.log("Calculation saved!")
+    }
   }
 
+  // If no user is logged in, show the auth form
+  if (!user) {
+    return (
+      <div style={{ fontFamily: "Arial, sans-serif", backgroundColor: "#f4f4f4", minHeight: "100vh" }}>
+        <Navbar />
+        <div style={{ maxWidth: "400px", margin: "80px auto", padding: "40px 24px", backgroundColor: "white", borderRadius: "12px", boxShadow: "0 2px 12px rgba(0,0,0,0.1)" }}>
+          <h2 style={{ marginBottom: "24px", color: "#222" }}>
+            {authMode === "login" ? "Log In" : "Sign Up"}
+          </h2>
+
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ display: "block", width: "100%", padding: "12px", fontSize: "16px", marginBottom: "12px", borderRadius: "8px", border: "1px solid #ccc" }}
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ display: "block", width: "100%", padding: "12px", fontSize: "16px", marginBottom: "12px", borderRadius: "8px", border: "1px solid #ccc" }}
+          />
+
+          {authError && (
+            <p style={{ color: "red", marginBottom: "12px" }}>{authError}</p>
+          )}
+
+          <button
+            onClick={authMode === "login" ? handleLogin : handleSignUp}
+            style={{ width: "100%", padding: "12px", backgroundColor: "#4f46e5", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", cursor: "pointer", marginBottom: "12px" }}
+          >
+            {authMode === "login" ? "Log In" : "Sign Up"}
+          </button>
+
+          <p style={{ textAlign: "center", color: "#666" }}>
+            {authMode === "login" ? "Don't have an account? " : "Already have an account? "}
+            <span
+              onClick={() => setAuthMode(authMode === "login" ? "signup" : "login")}
+              style={{ color: "#4f46e5", cursor: "pointer" }}
+            >
+              {authMode === "login" ? "Sign Up" : "Log In"}
+            </span>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // If user is logged in, show the calculator
   return (
     <div style={{ fontFamily: "Arial, sans-serif", backgroundColor: "#f4f4f4", minHeight: "100vh" }}>
-
       <Navbar />
-      
       <Hero />
 
       <div style={{ maxWidth: "400px", margin: "0 auto", padding: "40px 24px" }}>
+
+        <p style={{ color: "#666", marginBottom: "16px" }}>Logged in as {user.email}</p>
+
+        <button
+          onClick={handleLogout}
+          style={{ marginBottom: "24px", padding: "8px 16px", backgroundColor: "#e5e7eb", border: "none", borderRadius: "8px", cursor: "pointer" }}
+        >
+          Log Out
+        </button>
 
         <input
           type="number"
@@ -57,7 +171,6 @@ export default function Home() {
             <p style={{ fontSize: "18px", fontWeight: "bold", color: "#222222" }}>Total: ${total}</p>
           </div>
         )}
-
       </div>
     </div>
   )
