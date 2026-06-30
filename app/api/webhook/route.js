@@ -1,7 +1,7 @@
 // Import Stripe to verify the webhook signature
 import Stripe from "stripe";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-04-30.basil",
+  apiVersion: "2026-06-24.dahlia",
 });
 
 // Import a Supabase client that uses elevated permissions (explained below)
@@ -38,10 +38,16 @@ export async function POST(req) {
 
     // Create a Supabase client with the SERVICE ROLE key — this bypasses
     // row-level security so the webhook (which has no logged-in user) can update any row
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
     // Mark this user as Pro
     const { error } = await supabaseAdmin
