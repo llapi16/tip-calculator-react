@@ -33,11 +33,7 @@ export default function Home() {
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  async function handleSignUp() {
-    setAuthError("")
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) setAuthError(error.message)
-  }
+
 
   async function handleLogin() {
     setAuthError("")
@@ -48,6 +44,31 @@ export default function Home() {
   async function handleLogout() {
     await supabase.auth.signOut()
   }
+
+  async function handleUpgrade() {
+  // Call our API route, sending the logged-in user's id and email
+
+console.log("Upgrading user:", user.id, user.email)
+
+  const res = await fetch("/api/create-checkout-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId: user.id,
+      userEmail: user.email,
+    }),
+  })
+
+  // The API route sends back a Stripe checkout URL
+  const data = await res.json()
+
+  // Send the browser to that URL — this is Stripe's hosted payment page
+  if (data.url) {
+    window.location.href = data.url
+  } else {
+    console.log("Error creating checkout session:", data.error)
+  }
+}
 
   async function calculateTip() {
     const billNum = parseFloat(bill)
@@ -141,6 +162,14 @@ export default function Home() {
         >
           Log Out
         </button>
+
+        <button
+          onClick={handleUpgrade}
+          style={{ marginBottom: "24px", marginLeft: "12px", padding: "8px 16px", backgroundColor: "#4f46e5", color: "white", border: "none", borderRadius: "8px", cursor: "pointer" }}
+        >
+          Upgrade to Pro
+        </button>
+        
 
         <input
           type="number"
