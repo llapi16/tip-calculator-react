@@ -45,6 +45,30 @@ export default function Home() {
     await supabase.auth.signOut()
   }
 
+  async function handleSignUp() {
+  setAuthError("")
+
+  // Create the user's login account
+  const { data, error } = await supabase.auth.signUp({ email, password })
+
+  if (error) {
+    setAuthError(error.message)
+    return
+  }
+
+  // Create a matching row in the profiles table for this new user
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .insert({
+      id: data.user.id,
+      is_pro: false,
+    })
+
+  if (profileError) {
+    console.log("Error creating profile:", profileError.message)
+  }
+}
+
   async function handleUpgrade() {
   // Call our API route, sending the logged-in user's id and email
 
@@ -70,30 +94,54 @@ console.log("Upgrading user:", user.id, user.email)
   }
 }
 
-  async function calculateTip() {
-    const billNum = parseFloat(bill)
-    const tipNum = parseFloat(tip)
-    const calculatedTip = billNum * (tipNum / 100)
-    const calculatedTotal = billNum + calculatedTip
-    setTipAmount(calculatedTip.toFixed(2))
-    setTotal(calculatedTotal.toFixed(2))
+async function calculateTip() {
+  // Check if this user is Pro by looking up their profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_pro")
+    .eq("id", user.id)
+    .single()
 
-    const { error } = await supabase
+  const isPro = profile?.is_pro ?? false
+
+  // If they're not Pro, check how many calculations they've done
+  if (!isPro) {
+    const { count } = await supabase
       .from("calculations")
-      .insert({
-        bill_amount: billNum,
-        tip_percent: tipNum,
-        tip_amount: calculatedTip,
-        total: calculatedTotal,
-        user_id: user.id,
-      })
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
 
-    if (error) {
-      console.log("Error saving to database:", error.message)
-    } else {
-      console.log("Calculation saved!")
+    // If they've hit the limit, block the calculation and show upgrade message
+    if ((count ?? 0) >= 3) {
+      alert("You've used your 3 free calculations. Upgrade to Pro for unlimited access!")
+      return // stop here — don't run the calculation
     }
   }
+
+  // If we get here, either they're Pro or under the limit — run the calculation
+  const billNum = parseFloat(bill)
+  const tipNum = parseFloat(tip)
+  const calculatedTip = billNum * (tipNum / 100)
+  const calculatedTotal = billNum + calculatedTip
+  setTipAmount(calculatedTip.toFixed(2))
+  setTotal(calculatedTotal.toFixed(2))
+
+  const { error } = await supabase
+    .from("calculations")
+    .insert({
+      bill_amount: billNum,
+      tip_percent: tipNum,
+      tip_amount: calculatedTip,
+      total: calculatedTotal,
+      user_id: user.id,
+    })
+
+  if (error) {
+    console.log("Error saving to database:", error.message)
+  } else {
+    console.log("Calculation saved!")
+  }
+}
 
   // If no user is logged in, show the auth form
   if (!user) {
